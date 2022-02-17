@@ -22,12 +22,12 @@ namespace rofirger
 	class Log
 	{
 	public:
-		static Log* GetInstance();
+		static Log* GetInstance()noexcept;
 		void SetMsgBufferSize(size_t _s_)noexcept;
 		void SetFolderPath(const char* _folder_path_)noexcept;
-		bool StartLog();
-		void StopLog();
-		void AddLog(LOG_LEVEL _log_level_, const char* _file_, size_t _line_num_, const char* _func_sig_, const char* fmt_, ...);
+		bool StartLog()noexcept;
+		void StopLog()noexcept;
+		void AddLog(LOG_LEVEL _log_level_, const char* _file_, size_t _line_num_, const char* _func_sig_, const char* fmt_, ...)noexcept;
 	private:
 		Log() = default;
 		~Log();
@@ -36,7 +36,7 @@ namespace rofirger
 		void ThreadFunc();
 		void CheckFileSize();
 	private:
-		std::string _level_str[4]{ "INFO","WARNING","ERROR","FATAL" };
+		const std::string _level_str[4]{ "INFO","WARNING","ERROR","FATAL" };
 		static Log* _ptr_log;
 		std::mutex _mutex;
 		static std::mutex _mutex_get_instance;

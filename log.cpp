@@ -24,7 +24,7 @@
 
 rofirger::Log* rofirger::Log::_ptr_log = NULL;
 std::mutex rofirger::Log::_mutex_get_instance;
-rofirger::Log* rofirger::Log::GetInstance()
+rofirger::Log* rofirger::Log::GetInstance()noexcept
 {
 	if (NULL == rofirger::Log::_ptr_log)
 	{
@@ -56,7 +56,7 @@ void rofirger::Log::SetFolderPath(const char* _folder_path_)noexcept
 	_folder_path = _folder_path_;
 }
 
-bool rofirger::Log::StartLog()
+bool rofirger::Log::StartLog()noexcept
 {
 	_is_stop = false;
 	struct stat info;
@@ -82,7 +82,7 @@ POS_LOG_STARTLOG_FUNC_BREAK_IF:
 	return true;
 }
 
-void rofirger::Log::StopLog()
+void rofirger::Log::StopLog()noexcept
 {
 	while (!_queue_log_data.empty()) {}
 	_is_stop = true;
@@ -90,13 +90,26 @@ void rofirger::Log::StopLog()
 	_thread->join();
 }
 
-void rofirger::Log::AddLog(LOG_LEVEL _log_level_, const char* _file_, size_t _line_num_, const char* _func_sig_, const char* fmt_, ...)
+void rofirger::Log::AddLog(LOG_LEVEL _log_level_, const char* _file_, size_t _line_num_, const char* _func_sig_, const char* fmt_, ...)noexcept
 {
-	std::vector<char> msg;
-	msg.resize(_msg_buffer_size);
+	static std::vector<char> msg;
+	if (msg.size() <= 0)
+	{
+		msg.resize(_msg_buffer_size);
+	}
 	va_list ap;
 	va_start(ap, fmt_);
-	vsnprintf(msg.data(), msg.size(), fmt_, ap);
+	int ret = vsnprintf(msg.data(), msg.size(), fmt_, ap);
+	while (ret < 0)
+	{
+		SetMsgBufferSize(_msg_buffer_size << 1);
+		msg.resize(_msg_buffer_size);
+		ret = vsnprintf(msg.data(), msg.size(), fmt_, ap);
+		char vsnp_err_info[200];
+		size_t num_err_info = sprintf(vsnp_err_info, "LOG INTERNAL ERROR: VSNPRINTF FUNCTION RETURN NEGATIVE NUMBER!!! NOW LOG MSG BUFFER SIZE IS %d", _msg_buffer_size);
+		fwrite((void*)vsnp_err_info, num_err_info + 1, 1, _ptr_file);
+		fflush(_ptr_file);
+	}
 	va_end(ap);
 
 	time_t now = time(NULL);
@@ -105,7 +118,7 @@ void rofirger::Log::AddLog(LOG_LEVEL _log_level_, const char* _file_, size_t _li
 	auto chrono_time_now = std::chrono::system_clock::now();
 	auto chrono_msecs = std::chrono::duration_cast<std::chrono::milliseconds>(chrono_time_now.time_since_epoch()).count()
 		- std::chrono::duration_cast<std::chrono::seconds>(chrono_time_now.time_since_epoch()).count() * 1000;
-	sprintf(complete_log, "[%04d-%02d-%02d %02d:%02d:%02d.%03d][%s][0x%04x][FILE:%s LINE:%d FUNC:%s][MSG:%s]\n",
+	sprintf(complete_log, "[%04d-%02d-%02d %02d:%02d:%02d.%lld][%s][0x%04x][FILE:%s LINE:%d FUNC:%s][MSG:%s]\n",
 		tmstr->tm_year + 1900,
 		tmstr->tm_mon + 1,
 		tmstr->tm_mday,
@@ -153,9 +166,10 @@ void rofirger::Log::CheckFileSize()
 {
 	struct stat info;
 	constexpr long log_file_overflow_size = 1024 * 1024;
+	_off_t file_size_ = 0;
 	if (stat(_file_path.c_str(), &info) == 0)
 	{
-		_off_t file_size_ = info.st_size; // the number of bytes of the file
+		file_size_ = info.st_size; // the number of bytes of the file
 		if (file_size_ > log_file_overflow_size)
 		{
 		POS_LOG_RESTART_MAKE_NEW_FILE:
