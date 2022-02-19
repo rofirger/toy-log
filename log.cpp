@@ -1,4 +1,9 @@
-﻿#define _CRT_SECURE_NO_WARNINGS
+﻿/*!
+*@author Rofirger
+*@date   February 10, 2022
+*@brief	 log system
+*/
+#define _CRT_SECURE_NO_WARNINGS
 #include "log.h"
 #include <time.h>
 #include <stdio.h>
@@ -46,7 +51,7 @@ rofirger::Log::~Log()
 	}
 }
 
-void rofirger::Log::SetMsgBufferSize(size_t _s_)noexcept
+void rofirger::Log::SetMsgBufferSize(const size_t _s_)noexcept
 {
 	_msg_buffer_size = _s_;
 }
@@ -54,6 +59,11 @@ void rofirger::Log::SetMsgBufferSize(size_t _s_)noexcept
 void rofirger::Log::SetFolderPath(const char* _folder_path_)noexcept
 {
 	_folder_path = _folder_path_;
+}
+
+void ::rofirger::Log::SetLogFileMaxSize(const long _s_)noexcept
+{
+	_log_file_overflow_size = _s_;
 }
 
 bool rofirger::Log::StartLog()noexcept
@@ -88,15 +98,16 @@ void rofirger::Log::StopLog()noexcept
 	_is_stop = true;
 	_cv.notify_one();
 	_thread->join();
+	if (NULL != _ptr_file)
+	{
+		fclose(_ptr_file);
+		_ptr_file = NULL;
+	}
 }
 
 void rofirger::Log::AddLog(LOG_LEVEL _log_level_, const char* _file_, size_t _line_num_, const char* _func_sig_, const char* fmt_, ...)noexcept
 {
-	static std::vector<char> msg;
-	if (msg.size() <= 0)
-	{
-		msg.resize(_msg_buffer_size);
-	}
+	std::vector<char> msg(_msg_buffer_size);
 	va_list ap;
 	va_start(ap, fmt_);
 	int ret = vsnprintf(msg.data(), msg.size(), fmt_, ap);
@@ -114,11 +125,11 @@ void rofirger::Log::AddLog(LOG_LEVEL _log_level_, const char* _file_, size_t _li
 
 	time_t now = time(NULL);
 	struct tm* tmstr = localtime(&now);
-	char complete_log[10500] = { 0 };
+	std::vector<char> complete_log(_msg_buffer_size + 200);
 	auto chrono_time_now = std::chrono::system_clock::now();
 	auto chrono_msecs = std::chrono::duration_cast<std::chrono::milliseconds>(chrono_time_now.time_since_epoch()).count()
 		- std::chrono::duration_cast<std::chrono::seconds>(chrono_time_now.time_since_epoch()).count() * 1000;
-	sprintf(complete_log, "[%04d-%02d-%02d %02d:%02d:%02d.%lld][%s][0x%04x][FILE:%s LINE:%d FUNC:%s][MSG:%s]\n",
+	sprintf(complete_log.data(), "[%04d-%02d-%02d %02d:%02d:%02d.%03lld][%s][0x%04x][FILE:%s LINE:%d FUNC:%s][MSG:%s]\n",
 		tmstr->tm_year + 1900,
 		tmstr->tm_mon + 1,
 		tmstr->tm_mday,
@@ -135,7 +146,7 @@ void rofirger::Log::AddLog(LOG_LEVEL _log_level_, const char* _file_, size_t _li
 
 	{
 		std::lock_guard<std::mutex> guard(_mutex);
-		_queue_log_data.push(complete_log);
+		_queue_log_data.push(complete_log.data());
 	}
 	_cv.notify_one();
 }
@@ -165,13 +176,17 @@ void rofirger::Log::ThreadFunc()
 void rofirger::Log::CheckFileSize()
 {
 	struct stat info;
-	constexpr long log_file_overflow_size = 1024 * 1024;
 	_off_t file_size_ = 0;
 	if (stat(_file_path.c_str(), &info) == 0)
 	{
 		file_size_ = info.st_size; // the number of bytes of the file
-		if (file_size_ > log_file_overflow_size)
+		if (file_size_ > _log_file_overflow_size)
 		{
+			if (NULL != _ptr_file)
+			{
+				fclose(_ptr_file);
+				_ptr_file = NULL;
+			}
 		POS_LOG_RESTART_MAKE_NEW_FILE:
 			time_t now_time = time(NULL);
 			struct tm* t = localtime(&now_time);
