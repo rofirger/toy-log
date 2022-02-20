@@ -105,44 +105,45 @@ void rofirger::Log::StopLog()noexcept
 	}
 }
 
-void rofirger::Log::AddLog(LOG_LEVEL _log_level_, const char* _file_, size_t _line_num_, const char* _func_sig_, const char* fmt_, ...)noexcept
+void rofirger::Log::AddLog(LOG_LEVEL _log_level_, LogEnvironment _log_environment_, const char* _file_, size_t _line_num_, const char* _func_sig_, const char* fmt_, ...)noexcept
 {
 	std::vector<char> msg(_msg_buffer_size);
 	va_list ap;
 	va_start(ap, fmt_);
 	int ret = vsnprintf(msg.data(), msg.size(), fmt_, ap);
-	while (ret < 0)
+	if (ret < 0)
 	{
-		SetMsgBufferSize(_msg_buffer_size << 1);
-		msg.resize(_msg_buffer_size);
-		ret = vsnprintf(msg.data(), msg.size(), fmt_, ap);
-		char vsnp_err_info[200];
-		size_t num_err_info = sprintf(vsnp_err_info, "LOG INTERNAL ERROR: VSNPRINTF FUNCTION RETURN NEGATIVE NUMBER!!! NOW LOG MSG BUFFER SIZE IS %d", _msg_buffer_size);
-		fwrite((void*)vsnp_err_info, num_err_info + 1, 1, _ptr_file);
-		fflush(_ptr_file);
+		sprintf(msg.data(), "LOG INTERNAL ERROR : VSNPRINTF FUNCTION RETURN A NEGATIVE NUMBER!!!NOW LOG MSG BUFFER SIZE IS % d.Check whether the log contains{ wide characters }!The log system does not support wide characters!", _msg_buffer_size);
+		_log_level_ = LOG_LEVEL_FATAL;
 	}
 	va_end(ap);
 
 	time_t now = time(NULL);
 	struct tm* tmstr = localtime(&now);
-	std::vector<char> complete_log(_msg_buffer_size + 200);
+	std::vector<char> complete_log(_msg_buffer_size + 100);
 	auto chrono_time_now = std::chrono::system_clock::now();
 	auto chrono_msecs = std::chrono::duration_cast<std::chrono::milliseconds>(chrono_time_now.time_since_epoch()).count()
 		- std::chrono::duration_cast<std::chrono::seconds>(chrono_time_now.time_since_epoch()).count() * 1000;
-	sprintf(complete_log.data(), "[%04d-%02d-%02d %02d:%02d:%02d.%03lld][%s][0x%04x][FILE:%s LINE:%d FUNC:%s][MSG:%s]\n",
-		tmstr->tm_year + 1900,
-		tmstr->tm_mon + 1,
-		tmstr->tm_mday,
-		tmstr->tm_hour,
-		tmstr->tm_min,
-		tmstr->tm_sec,
-		chrono_msecs,
-		_level_str[(int)_log_level_].c_str(),
-		std::this_thread::get_id(),
-		_file_,
-		_line_num_,
-		_func_sig_,
-		msg.data());
+	switch (_log_environment_)
+	{
+	case rofirger::LOG_ENVIRONMENT_DEBUG:
+	{
+		sprintf(complete_log.data(), "[%04d-%02d-%02d %02d:%02d:%02d.%03lld][%s][0x%04x][FILE:%s LINE:%d FUNC:%s][MSG:%s]\n",
+			tmstr->tm_year + 1900, tmstr->tm_mon + 1, tmstr->tm_mday, tmstr->tm_hour, tmstr->tm_min, tmstr->tm_sec, chrono_msecs,
+			_level_str[(int)_log_level_].c_str(), std::this_thread::get_id(), _file_, _line_num_, _func_sig_, msg.data());
+		break;
+	}
+	case rofirger::LOG_ENVIRONMENT_RELEASE:
+	{
+		sprintf(complete_log.data(), "[%04d-%02d-%02d %02d:%02d:%02d.%03lld][%s][0x%04x][MSG:%s]\n",
+			tmstr->tm_year + 1900, tmstr->tm_mon + 1, tmstr->tm_mday, tmstr->tm_hour, tmstr->tm_min, tmstr->tm_sec, chrono_msecs,
+			_level_str[(int)_log_level_].c_str(), std::this_thread::get_id(), msg.data());
+		break;
+	}
+	default:
+		break;
+	}
+
 
 	{
 		std::lock_guard<std::mutex> guard(_mutex);

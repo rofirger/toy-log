@@ -9,6 +9,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#define ROFIRGER_LOG_RELEASE 1
 namespace rofirger
 {
 	typedef enum LOG_LEVEL
@@ -18,7 +19,16 @@ namespace rofirger
 		LOG_LEVEL_ERROR = 0x02,
 		LOG_LEVEL_FATAL = 0x03
 	}LOG_LEVEL;
-#define add_log(_log_level_, ...) Log::GetInstance()->AddLog(_log_level_,__FILE__,__LINE__,__FUNCSIG__,__VA_ARGS__)
+	typedef enum LogEnvironment
+	{
+		LOG_ENVIRONMENT_DEBUG = 0x00,
+		LOG_ENVIRONMENT_RELEASE = 0x01
+	}LogEnvironment;
+#if defined(ROFIRGER_LOG_DEBUG)
+#define add_log(_log_level_, ...) Log::GetInstance()->AddLog(_log_level_,rofirger::LOG_ENVIRONMENT_DEBUG,__FILE__,__LINE__,__FUNCSIG__,__VA_ARGS__)
+#elif defined(ROFIRGER_LOG_RELEASE)
+#define add_log(_log_level_, ...) Log::GetInstance()->AddLog(_log_level_,rofirger::LOG_ENVIRONMENT_RELEASE,__FILE__,__LINE__,__FUNCSIG__,__VA_ARGS__)
+#endif
 	class Log
 	{
 	public:
@@ -28,7 +38,7 @@ namespace rofirger
 		void SetLogFileMaxSize(const long _s_)noexcept;
 		bool StartLog()noexcept;
 		void StopLog()noexcept;
-		void AddLog(LOG_LEVEL _log_level_, const char* _file_, size_t _line_num_, const char* _func_sig_, const char* fmt_, ...)noexcept;
+		void AddLog(LOG_LEVEL _log_level_, LogEnvironment _log_environment_, const char* _file_, size_t _line_num_, const char* _func_sig_, const char* fmt_, ...)noexcept;
 	private:
 		Log() = default;
 		~Log();
