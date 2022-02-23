@@ -9,7 +9,12 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
-#define ROFIRGER_LOG_RELEASE 1
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:26495)
+#endif // _MSC_VER
+
 namespace rofirger
 {
 	typedef enum LOG_LEVEL
@@ -66,4 +71,10 @@ namespace rofirger
 		long _log_file_overflow_size = 10 * 1024 * 1024;
 	};
 }
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif // _MSC_VER
+
+
 #endif
